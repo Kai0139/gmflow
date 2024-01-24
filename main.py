@@ -376,7 +376,11 @@ def main(args):
             train_sampler.set_epoch(epoch)
 
         for i, sample in enumerate(train_loader):
+            
             img1, img2, flow_gt, valid = [x.to(device) for x in sample]
+            img1 = img1[:,0,:,:]
+            img2 = img2[:,0,:,:]
+            # print("img shape: {}".format(img1.shape)) # B, C, H, W
 
             results_dict = model(img1, img2,
                                  attn_splits_list=args.attn_splits_list,

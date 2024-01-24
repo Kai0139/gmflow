@@ -40,13 +40,19 @@ class FlowDataset(data.Dataset):
         if self.is_test:
             img1 = frame_utils.read_gen(self.image_list[index][0])
             img2 = frame_utils.read_gen(self.image_list[index][1])
-
-            img1 = np.array(img1).astype(np.uint8)[..., :3]
-            img2 = np.array(img2).astype(np.uint8)[..., :3]
+            # print("img1 shape: {}".format(img1.shape))
+            img1 = np.array(img1).astype(np.uint8)[..., :1]
+            img2 = np.array(img2).astype(np.uint8)[..., :1]
+            # print("img1 shape c1: {}".format(img1.shape))
+            # import cv2
+            # import sys
+            # cv2.imwrite("test_img1.png", img1)
+            # cv2.imwrite("test_img2.png", img2)
+            # sys.exit()
 
             img1 = torch.from_numpy(img1).permute(2, 0, 1).float()
             img2 = torch.from_numpy(img2).permute(2, 0, 1).float()
-
+            # print("rt1: img1 shape returned {}".format(img1.shape))
             return img1, img2, self.extra_info[index]
 
         if not self.init_seed:
@@ -74,6 +80,7 @@ class FlowDataset(data.Dataset):
         flow = np.array(flow).astype(np.float32)
         img1 = np.array(img1).astype(np.uint8)
         img2 = np.array(img2).astype(np.uint8)
+        # print("img1 shape: {}".format(img1.shape))
 
         if self.load_occlusion:
             occlusion = np.array(occlusion).astype(np.float32)
@@ -82,6 +89,7 @@ class FlowDataset(data.Dataset):
         if len(img1.shape) == 2:
             img1 = np.tile(img1[..., None], (1, 1, 3))
             img2 = np.tile(img2[..., None], (1, 1, 3))
+            # print("img1 tiled shape: {}".format(img1.shape))
         else:
             img1 = img1[..., :3]
             img2 = img2[..., :3]
@@ -111,9 +119,7 @@ class FlowDataset(data.Dataset):
         if self.load_occlusion:
             # non-occlusion: 0, occlusion: 255
             noc_valid = 1 - occlusion / 255.  # 0 or 1
-
             return img1, img2, flow, valid.float(), noc_valid.float()
-
         return img1, img2, flow, valid.float()
 
     def __rmul__(self, v):
@@ -213,6 +219,8 @@ class FlyingThings3D(FlowDataset):
                         elif direction == 'into_past':
                             self.image_list += [[images[i + 1], images[i]]]
                             self.flow_list += [flows[i + 1]]
+        print(self.image_list[0])
+        print(self.flow_list[0])
 
         # validate on 1024 subset of test set for fast speed
         if test_set and validate_subset:
@@ -306,6 +314,14 @@ def build_train_dataset(args):
 
         train_dataset = KITTI(aug_params, split='training',
                               )
+    elif args.stage == "thermal":
+        print("going to extract thermal image data")
+        aug_params = {'crop_size': args.image_size, 'min_scale': -0.4, 'max_scale': 0.8, 'do_flip': True}
+        thermal_dataset = FlyingThings3D(aug_params, 
+                                         root="/data/kaizhang/flyingthings3d",
+                                         dstype='thermal_image')
+                                         
+        train_dataset = thermal_dataset
     else:
         raise ValueError(f'stage {args.stage} is not supported')
 
