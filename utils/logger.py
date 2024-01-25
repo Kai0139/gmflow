@@ -28,17 +28,20 @@ class Logger:
         lr = self.lr_scheduler.get_last_lr()[0]
         self.summary_writer.add_scalar('lr', lr, self.total_steps)
 
-    def add_image_summary(self, img1, img2, flow_preds, flow_gt, mode='train',
-                          ):
+    def add_image_summary(self, img1, img2, flow_preds, flow_gt, mode='train'):
         if self.total_steps % self.summary_freq == 0:
             img_concat = torch.cat((img1[0].detach().cpu(), img2[0].detach().cpu()), dim=-1)
             img_concat = img_concat.type(torch.uint8)  # convert to uint8 to visualize in tensorboard
+            # tile up image
+            img_concat = torch.tile(img_concat, (3,1,1))
 
             flow_pred = flow_tensor_to_image(flow_preds[-1][0])
             forward_flow_gt = flow_tensor_to_image(flow_gt[0])
             flow_concat = torch.cat((torch.from_numpy(flow_pred),
                                      torch.from_numpy(forward_flow_gt)), dim=-1)
 
+            # print("img_concat shape: {}".format(img_concat.shape))
+            # print("flow_concat shape: {}".format(flow_concat.shape))
             concat = torch.cat((img_concat, flow_concat), dim=-2)
 
             self.summary_writer.add_image(mode + '/img_pred_gt', concat, self.total_steps)
@@ -54,7 +57,8 @@ class Logger:
 
             self.running_loss[key] += metrics[key]
 
-        if self.total_steps % self.summary_freq == 0:
+        # if self.total_steps % self.summary_freq == 0:
+        if True:
             self.print_training_status(mode)
             self.running_loss = {}
 

@@ -62,6 +62,11 @@ def normalize_img(img0, img1):
 
     return img0, img1
 
+def normalize_thermal_img(img0, img1):
+    img0 = (img0 / 255 - 0.5) / 0.225
+    img1 = (img1 / 255 - 0.5) / 0.225
+    return img0, img1
+
 
 def feature_add_position(feature0, feature1, attn_splits, feature_channels):
     pos_enc = PositionEmbeddingSine(num_pos_feats=feature_channels // 2)

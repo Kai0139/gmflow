@@ -378,9 +378,10 @@ def main(args):
         for i, sample in enumerate(train_loader):
             
             img1, img2, flow_gt, valid = [x.to(device) for x in sample]
-            img1 = img1[:,0,:,:]
-            img2 = img2[:,0,:,:]
+            img1 = torch.unsqueeze(img1[:,0,:,:], 1)
+            img2 = torch.unsqueeze(img2[:,0,:,:], 1)
             # print("img shape: {}".format(img1.shape)) # B, C, H, W
+
 
             results_dict = model(img1, img2,
                                  attn_splits_list=args.attn_splits_list,
@@ -418,10 +419,10 @@ def main(args):
 
             if args.local_rank == 0:
                 logger.push(metrics)
-
                 logger.add_image_summary(img1, img2, flow_preds, flow_gt)
 
             total_steps += 1
+            print("steps: {} / {}".format(total_steps, args.num_steps))
 
             if total_steps % args.save_ckpt_freq == 0 or total_steps == args.num_steps:
                 if args.local_rank == 0:

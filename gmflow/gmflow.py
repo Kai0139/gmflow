@@ -6,7 +6,7 @@ from .backbone import CNNEncoder
 from .transformer import FeatureTransformer, FeatureFlowAttention
 from .matching import global_correlation_softmax, local_correlation_softmax
 from .geometry import flow_warp
-from .utils import normalize_img, feature_add_position
+from .utils import normalize_img, feature_add_position, normalize_thermal_img
 
 
 class GMFlow(nn.Module):
@@ -100,7 +100,8 @@ class GMFlow(nn.Module):
         results_dict = {}
         flow_preds = []
 
-        img0, img1 = normalize_img(img0, img1)  # [B, 3, H, W]
+        # img0, img1 = normalize_img(img0, img1)  # [B, 3, H, W]
+        img0, img1 = normalize_thermal_img(img0, img1)  # [B, 1, H, W]
 
         # resolution low to high
         feature0_list, feature1_list = self.extract_feature(img0, img1)  # list of features
