@@ -282,6 +282,93 @@ def validate_things(model,
 
     return results
 
+@torch.no_grad()
+def validate_thermal(model,
+                    padding_factor=8,
+                    with_speed_metric=False,
+                    max_val_flow=400,
+                    val_things_clean_only=True,
+                    attn_splits_list=False,
+                    corr_radius_list=False,
+                    prop_radius_list=False,
+                    ):
+    """ Peform validation using the Things (test) split """
+    model.eval()
+    results = {}
+
+    dstype = "thermal_image"
+
+    val_dataset = data.FlyingThings3D(dstype=dstype, test_set=True, validate_subset=True,
+                                        )
+    print('Number of validation image pairs: %d' % len(val_dataset))
+    epe_list = []
+
+    if with_speed_metric:
+        s0_10_list = []
+        s10_40_list = []
+        s40plus_list = []
+
+    for val_id in range(len(val_dataset)):
+        image1, image2, flow_gt, valid_gt = val_dataset[val_id]
+        image1 = image1[None].cuda()
+        image2 = image2[None].cuda()
+
+        padder = InputPadder(image1.shape, padding_factor=padding_factor)
+        image1, image2 = padder.pad(image1, image2)
+
+        results_dict = model(image1, image2,
+                                attn_splits_list=attn_splits_list,
+                                corr_radius_list=corr_radius_list,
+                                prop_radius_list=prop_radius_list,
+                                )
+        flow_pr = results_dict['flow_preds'][-1]
+
+        flow = padder.unpad(flow_pr[0]).cpu()
+
+        # Evaluation on flow <= max_val_flow
+        flow_gt_speed = torch.sum(flow_gt ** 2, dim=0).sqrt()
+        valid_gt = valid_gt * (flow_gt_speed < max_val_flow)
+        valid_gt = valid_gt.contiguous()
+
+        epe = torch.sum((flow - flow_gt) ** 2, dim=0).sqrt()
+        val = valid_gt >= 0.5
+        epe_list.append(epe[val].cpu().numpy())
+
+        if with_speed_metric:
+            valid_mask = (flow_gt_speed < 10) * (valid_gt >= 0.5)
+            if valid_mask.max() > 0:
+                s0_10_list.append(epe[valid_mask].cpu().numpy())
+
+            valid_mask = (flow_gt_speed >= 10) * (flow_gt_speed <= 40) * (valid_gt >= 0.5)
+            if valid_mask.max() > 0:
+                s10_40_list.append(epe[valid_mask].cpu().numpy())
+
+            valid_mask = (flow_gt_speed > 40) * (valid_gt >= 0.5)
+            if valid_mask.max() > 0:
+                s40plus_list.append(epe[valid_mask].cpu().numpy())
+
+    epe_list = np.mean(np.concatenate(epe_list))
+
+    epe = np.mean(epe_list)
+
+    print("Validation Things test set (%s) EPE: %.3f" % (dstype, epe))
+    results[dstype + '_epe'] = epe
+
+    if with_speed_metric:
+        s0_10 = np.mean(np.concatenate(s0_10_list))
+        s10_40 = np.mean(np.concatenate(s10_40_list))
+        s40plus = np.mean(np.concatenate(s40plus_list))
+
+        print("Validation Things test (%s) s0_10: %.3f, s10_40: %.3f, s40+: %.3f" % (
+            dstype, s0_10,
+            s10_40,
+            s40plus))
+
+        results[dstype + '_s0_10'] = s0_10
+        results[dstype + '_s10_40'] = s10_40
+        results[dstype + '_s40+'] = s40plus
+
+    return results
 
 @torch.no_grad()
 def validate_sintel(model,

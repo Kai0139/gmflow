@@ -219,8 +219,8 @@ class FlyingThings3D(FlowDataset):
                         elif direction == 'into_past':
                             self.image_list += [[images[i + 1], images[i]]]
                             self.flow_list += [flows[i + 1]]
-        print(self.image_list[0])
-        print(self.flow_list[0])
+        # print(self.image_list[0])
+        # print(self.flow_list[0])
 
         # validate on 1024 subset of test set for fast speed
         if test_set and validate_subset:

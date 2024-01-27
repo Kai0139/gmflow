@@ -23,5 +23,5 @@ python3 main.py \
 --with_speed_metric \
 --val_freq 40000 \
 --save_ckpt_freq 50000 \
---num_steps 800000 \
+--num_steps 200000 \
 2>&1 | tee -a ${CHECKPOINT_DIR}/train.log

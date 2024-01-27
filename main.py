@@ -9,7 +9,7 @@ import os
 from data import build_train_dataset
 from gmflow.gmflow import GMFlow
 from loss import flow_loss_func
-from evaluate import (validate_chairs, validate_things, validate_sintel, validate_kitti,
+from evaluate import (validate_chairs, validate_things, validate_sintel, validate_kitti, validate_thermal,
                       create_sintel_submission, create_kitti_submission, inference_on_dir)
 
 from utils.logger import Logger
@@ -226,6 +226,16 @@ def main(args):
 
         if 'things' in args.val_dataset:
             results_dict = validate_things(model_without_ddp,
+                                           padding_factor=args.padding_factor,
+                                           with_speed_metric=args.with_speed_metric,
+                                           attn_splits_list=args.attn_splits_list,
+                                           corr_radius_list=args.corr_radius_list,
+                                           prop_radius_list=args.prop_radius_list,
+                                           )
+            val_results.update(results_dict)
+
+        if "thermal" in args.val_dataset:
+            results_dict = validate_thermal(model_without_ddp,
                                            padding_factor=args.padding_factor,
                                            with_speed_metric=args.with_speed_metric,
                                            attn_splits_list=args.attn_splits_list,
