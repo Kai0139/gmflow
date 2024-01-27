@@ -8,7 +8,7 @@
 NUM_GPUS=2
 
 # things (our final model is trained for 800K iterations, for ablation study, you can train for 200K)
-CHECKPOINT_DIR=checkpoints/things-gmflow && \
+CHECKPOINT_DIR=checkpoints/things-gmflow-shrink && \
 mkdir -p ${CHECKPOINT_DIR} && \
 python3 main.py \
 --checkpoint_dir ${CHECKPOINT_DIR} \
