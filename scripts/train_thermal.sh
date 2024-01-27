@@ -16,6 +16,7 @@ python3 main.py \
 --batch_size 8 \
 --val_dataset thermal \
 --lr 2e-4 \
+--feature_channels 96 \
 --image_size 384 768 \
 --padding_factor 16 \
 --upsample_factor 8 \

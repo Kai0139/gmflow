@@ -14,6 +14,7 @@ class GMFlow(nn.Module):
                  num_scales=1,
                  upsample_factor=8,
                  feature_channels=128,
+                 upsample_hidden_channels=192,
                  attention_type='swin',
                  num_transformer_layers=6,
                  ffn_dim_expansion=4,
@@ -43,9 +44,9 @@ class GMFlow(nn.Module):
         self.feature_flow_attn = FeatureFlowAttention(in_channels=feature_channels)
 
         # convex upsampling: concat feature0 and flow as input
-        self.upsampler = nn.Sequential(nn.Conv2d(2 + feature_channels, 256, 3, 1, 1),
+        self.upsampler = nn.Sequential(nn.Conv2d(2 + feature_channels, upsample_hidden_channels, 3, 1, 1),
                                        nn.ReLU(inplace=True),
-                                       nn.Conv2d(256, upsample_factor ** 2 * 9, 1, 1, 0))
+                                       nn.Conv2d(upsample_hidden_channels, upsample_factor ** 2 * 9, 1, 1, 0))
 
     def extract_feature(self, img0, img1):
         concat = torch.cat((img0, img1), dim=0)  # [2B, C, H, W]
