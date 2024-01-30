@@ -100,7 +100,7 @@ class GMFlowROS(object):
             self.img1 = self.img2
             flow = self.padder.unpad(flow_pred[0]).cpu()
             print("flow dims: {}".format(flow.shape))
-            # self.visualize(flow)
+            self.visualize(flow)
 
     def load_img(self, img_msg):
         cv_img = self.bridge.imgmsg_to_cv2(img_msg)
@@ -118,7 +118,8 @@ class GMFlowROS(object):
         # print("flow shape: {}".format(flow.shape))
         # map flow to rgb image
         flow = flow_tensor_to_image(flow)
-        # img_msg = self.bridge.cv2_to_imgmsg(flow, "bgr8")
+        print("converted flow dims: {}".format(flow.shape))
+        img_msg = self.bridge.cv2_to_imgmsg(flow, "bgr8")
         img_msg = self.bridge.cv2_to_compressed_imgmsg(flow)
         self.flow_pub.publish(img_msg)
 

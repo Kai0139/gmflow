@@ -286,6 +286,6 @@ def flow_tensor_to_image(flow):
     flow = flow.permute(1, 2, 0)  # [H, W, 2]
     flow = flow.detach().cpu().numpy()
     flow = flow_to_image(flow)  # [H, W, 3]
-    flow = np.transpose(flow, (2, 0, 1))  # [3, H, W]
+    # flow = np.transpose(flow, (2, 0, 1))  # [3, H, W]
 
     return flow

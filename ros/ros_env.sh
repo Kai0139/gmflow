@@ -1,0 +1,4 @@
+SERVER_IP=10.120.16.130
+export ROS_IP=${SERVER_IP}
+export ROS_MASTER_URI=http://${SERVER_IP}:11311
+
