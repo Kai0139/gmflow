@@ -8,6 +8,13 @@ from sensor_msgs.msg import Image, CompressedImage
 
 import torch
 import torch.nn.functional as F
+
+import sys
+from pathlib import Path
+gmflow_path = Path(__file__).resolve().parent.parent
+print(gmflow_path)
+sys.path.append(str(gmflow_path))
+
 from gmflow.gmflow import GMFlow
 from utils.flow_viz import flow_tensor_to_image
 
@@ -48,7 +55,8 @@ class GMFlowROS(object):
                    ffn_dim_expansion=self.ffn_dim_expansion,
                    num_transformer_layers=self.num_transformer_layers,
                    ).to(self.device)
-        self.model.load_state_dict(torch.load())
+        print("load model: {}".format(model_path))
+        self.model.load_state_dict(torch.load(model_path))
         
         self.attn_splits_list = [2]
         self.corr_radius_list = [-1]
@@ -105,7 +113,8 @@ class GMFlowROS(object):
         self.flow_pub.publish(img_msg)
 
 if __name__ == "__main__":
-    model_path = Path(__file__).resolve().parent.parent.joinpath("train_results", "shrink_model", "step_150000.pth")
+    model_path = Path(__file__).resolve().parent.parent.joinpath("train_results", "shrink_model", "step_200000.pth")
+    # print("model path: ")
     rospy.init_node("gmflow_ros")
-    gmf = GMFlowROS()
+    gmf = GMFlowROS(str(model_path))
     rospy.spin()
