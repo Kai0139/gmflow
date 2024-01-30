@@ -18,6 +18,8 @@ sys.path.append(str(gmflow_path))
 from gmflow.gmflow import GMFlow
 from utils.flow_viz import flow_tensor_to_image
 
+import time
+
 class InputPadder:
     """ Pads images such that dimensions are divisible by 8 """
     def __init__(self, dims, mode='sintel', padding_factor=16):
@@ -56,7 +58,8 @@ class GMFlowROS(object):
                    num_transformer_layers=self.num_transformer_layers,
                    ).to(self.device)
         print("load model: {}".format(model_path))
-        self.model.load_state_dict(torch.load(model_path))
+        weights = torch.load(model_path)["model"]
+        self.model.load_state_dict(weights)
         
         self.attn_splits_list = [2]
         self.corr_radius_list = [-1]
@@ -78,29 +81,36 @@ class GMFlowROS(object):
         if self.img1 is None:
             self.img1 = self.load_img(img_msg)
             self.padder = InputPadder(self.img1.shape)
-            print(self.img1.shape)
+            # print(self.img1.shape)
             self.img1 = self.padder.pad(self.img1)[0]
             return
         
         with torch.no_grad():
             self.img2 = self.padder.pad(self.load_img(img_msg))[0]
+            inf_start = time.time()
             results_dict = self.model(self.img1, self.img2,
                                  attn_splits_list=self.attn_splits_list,
                                  corr_radius_list=self.corr_radius_list,
                                  prop_radius_list=self.prop_radius_list,
                                  )
+            t_cost = time.time() - inf_start
+            print("inference time cost: {}".format(t_cost))
             
             flow_pred = results_dict["flow_preds"][-1]
             self.img1 = self.img2
             flow = self.padder.unpad(flow_pred[0]).cpu()
-            self.visualize(flow)
+            print("flow dims: {}".format(flow.shape))
+            # self.visualize(flow)
 
     def load_img(self, img_msg):
         cv_img = self.bridge.imgmsg_to_cv2(img_msg)
         # cv_img = cv2.resize(cv_img, (int(cv_img.shape[1]/2), int(cv_img.shape[0]/2)))
         np_img = np.array(cv_img).astype(np.uint8)
-        img = torch.from_numpy(np_img).permute(2, 0, 1).float()
-        print("img size: {}".format(np_img.shape))
+        
+        img = torch.from_numpy(np_img)
+        img = torch.unsqueeze(img, 2)
+        img = img.permute(2, 0, 1).float()
+        print("img size: {}".format(img.shape))
         return img[None].to(self.device)
     
     def visualize(self, flow):
