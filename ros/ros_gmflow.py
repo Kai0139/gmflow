@@ -5,6 +5,7 @@ import cv2
 import rospy
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image, CompressedImage
+from std_msgs.msg import Float32MultiArray, Float64MultiArray, MultiArrayDimension
 
 import torch
 import torch.nn.functional as F
@@ -68,27 +69,34 @@ class GMFlowROS(object):
         self.model.eval()
         self.bridge = CvBridge()
 
-        self.img1 = None
-        self.img2 = None
+        self.img1_arr = None
+        self.img2_arr = None
+        self.img1_tensor = None
+        self.img2_tensor = None
         self.save_idx = 0
 
         self.img_sub = rospy.Subscriber("/optris/thermal_image", Image, self.img_callback, queue_size=1)
         self.flow_pub = rospy.Publisher("/flow/compressed", CompressedImage, queue_size=1)
+        self.img_flow_pub = rospy.Publisher("/img_with_flow", Float32MultiArray, queue_size=1)
 
     def img_callback(self, img_msg):
         # self.save_image(img_msg)
         # return
-        if self.img1 is None:
-            self.img1 = self.load_img(img_msg)
-            self.padder = InputPadder(self.img1.shape)
+        if self.img1_tensor is None:
+            self.img1_arr = self.load_img_arr(img_msg)
+            self.img1_tensor = self.load_img_tensor(self.img1_arr)
+            self.padder = InputPadder(self.img1_tensor.shape)
             # print(self.img1.shape)
-            self.img1 = self.padder.pad(self.img1)[0]
+            self.img1_tensor = self.padder.pad(self.img1_tensor)[0]
+            print("padded img shape: {}".format(self.img1_tensor.shape))
             return
         
         with torch.no_grad():
-            self.img2 = self.padder.pad(self.load_img(img_msg))[0]
+            self.img2_arr = self.load_img_arr(img_msg)
+            self.img2_tensor = self.padder.pad(self.load_img_tensor(self.img2_arr))[0]
+            
             inf_start = time.time()
-            results_dict = self.model(self.img1, self.img2,
+            results_dict = self.model(self.img1_tensor, self.img2_tensor,
                                  attn_splits_list=self.attn_splits_list,
                                  corr_radius_list=self.corr_radius_list,
                                  prop_radius_list=self.prop_radius_list,
@@ -97,20 +105,26 @@ class GMFlowROS(object):
             print("inference time cost: {}".format(t_cost))
             
             flow_pred = results_dict["flow_preds"][-1]
-            self.img1 = self.img2
             flow = self.padder.unpad(flow_pred[0]).cpu()
-            print("flow dims: {}".format(flow.shape))
+            flow_data = flow.permute(1,2,0)
+            self.publish_multiarray(self.img1_arr, self.img2_arr, flow_data)
+
+            self.img1_tensor = self.img2_tensor
+            self.img1_arr = self.img2_arr
+            
+            # print("flow dims: {}".format(flow.shape))
             self.visualize(flow)
 
-    def load_img(self, img_msg):
+    def load_img_arr(self, img_msg):
         cv_img = self.bridge.imgmsg_to_cv2(img_msg)
-        # cv_img = cv2.resize(cv_img, (int(cv_img.shape[1]/2), int(cv_img.shape[0]/2)))
         np_img = np.array(cv_img).astype(np.uint8)
-        
+        return np_img
+
+    def load_img_tensor(self, np_img):
         img = torch.from_numpy(np_img)
         img = torch.unsqueeze(img, 2)
         img = img.permute(2, 0, 1).float()
-        print("img size: {}".format(img.shape))
+        # print("img size: {}".format(img.shape))
         return img[None].to(self.device)
     
     def visualize(self, flow):
@@ -118,10 +132,35 @@ class GMFlowROS(object):
         # print("flow shape: {}".format(flow.shape))
         # map flow to rgb image
         flow = flow_tensor_to_image(flow)
-        print("converted flow dims: {}".format(flow.shape))
+        # print("converted flow dims: {}".format(flow.shape))
         img_msg = self.bridge.cv2_to_imgmsg(flow, "bgr8")
         img_msg = self.bridge.cv2_to_compressed_imgmsg(flow)
         self.flow_pub.publish(img_msg)
+
+    def publish_multiarray(self, img1, img2, flow):
+        multi_arr = Float32MultiArray()
+        dim1 = MultiArrayDimension()
+        dim1.label = "height"
+        dim1.size = img1.shape[0]
+        dim1.stride = img1.shape[0] * img1.shape[1] * 4
+        dim2 = MultiArrayDimension()
+        dim2.label = "width"
+        dim2.size = img1.shape[1]
+        dim2.stride = img1.shape[1] * 4
+        dim3 = MultiArrayDimension()
+        dim3.label = "channels"
+        dim3.size = 4
+        dim3.stride = 4
+        multi_arr.layout.dim.append(dim1)
+        multi_arr.layout.dim.append(dim2)
+        multi_arr.layout.dim.append(dim3)
+
+        img1_data = img1.reshape((img1.shape[0] * img1.shape[1]))
+        img2_data = img2.reshape((img2.shape[0] * img2.shape[1]))
+        flow_data = flow.reshape((flow.shape[0] * flow.shape[1] * flow.shape[2]))
+        multi_arr.data = img1_data.tolist() + img2_data.tolist() + flow_data.tolist()
+        self.img_flow_pub.publish(multi_arr)
+        pass
 
 if __name__ == "__main__":
     model_path = Path(__file__).resolve().parent.parent.joinpath("train_results", "shrink_model", "step_200000.pth")
