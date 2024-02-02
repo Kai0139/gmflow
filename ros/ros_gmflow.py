@@ -69,6 +69,8 @@ class GMFlowROS(object):
         self.model.eval()
         self.bridge = CvBridge()
 
+        self.img1_ts = None
+        self.img2_ts = None
         self.img1_arr = None
         self.img2_arr = None
         self.img1_tensor = None
@@ -77,13 +79,14 @@ class GMFlowROS(object):
 
         self.img_sub = rospy.Subscriber("/optris/thermal_image", Image, self.img_callback, queue_size=1)
         self.flow_pub = rospy.Publisher("/flow/compressed", CompressedImage, queue_size=1)
-        self.img_flow_pub = rospy.Publisher("/img_with_flow", Float32MultiArray, queue_size=1)
+        self.img_flow_pub = rospy.Publisher("/img_with_flow", Float64MultiArray, queue_size=1)
 
     def img_callback(self, img_msg):
         # self.save_image(img_msg)
         # return
         if self.img1_tensor is None:
             self.img1_arr = self.load_img_arr(img_msg)
+            self.img1_ts = img_msg.header.stamp.to_sec()
             self.img1_tensor = self.load_img_tensor(self.img1_arr)
             self.padder = InputPadder(self.img1_tensor.shape)
             # print(self.img1.shape)
@@ -92,6 +95,7 @@ class GMFlowROS(object):
             return
         
         with torch.no_grad():
+            self.img2_ts = img_msg.header.stamp.to_sec()
             self.img2_arr = self.load_img_arr(img_msg)
             self.img2_tensor = self.padder.pad(self.load_img_tensor(self.img2_arr))[0]
             
@@ -107,10 +111,11 @@ class GMFlowROS(object):
             flow_pred = results_dict["flow_preds"][-1]
             flow = self.padder.unpad(flow_pred[0]).cpu()
             flow_data = flow.permute(1,2,0)
-            self.publish_multiarray(self.img1_arr, self.img2_arr, flow_data)
+            self.publish_multiarray(self.img1_arr, self.img2_arr, self.img1_ts, self.img2_ts, flow_data)
 
             self.img1_tensor = self.img2_tensor
             self.img1_arr = self.img2_arr
+            self.img1_ts = self.img2_ts
             
             # print("flow dims: {}".format(flow.shape))
             self.visualize(flow)
@@ -137,8 +142,8 @@ class GMFlowROS(object):
         img_msg = self.bridge.cv2_to_compressed_imgmsg(flow)
         self.flow_pub.publish(img_msg)
 
-    def publish_multiarray(self, img1, img2, flow):
-        multi_arr = Float32MultiArray()
+    def publish_multiarray(self, img1, img2, img1_ts, img2_ts, flow):
+        multi_arr = Float64MultiArray()
         dim1 = MultiArrayDimension()
         dim1.label = "height"
         dim1.size = img1.shape[0]
@@ -158,7 +163,7 @@ class GMFlowROS(object):
         img1_data = img1.reshape((img1.shape[0] * img1.shape[1]))
         img2_data = img2.reshape((img2.shape[0] * img2.shape[1]))
         flow_data = flow.reshape((flow.shape[0] * flow.shape[1] * flow.shape[2]))
-        multi_arr.data = img1_data.tolist() + img2_data.tolist() + flow_data.tolist()
+        multi_arr.data = img1_data.tolist() + img2_data.tolist() + flow_data.tolist() + [img1_ts, img2_ts]
         self.img_flow_pub.publish(multi_arr)
         pass
 
