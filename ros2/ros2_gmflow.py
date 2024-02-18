@@ -4,6 +4,7 @@ import cv2
 
 import rclpy
 from rclpy.node import Node
+from rclpy.time import Time
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image, CompressedImage
 from std_msgs.msg import Float32MultiArray, Float64MultiArray, MultiArrayDimension
@@ -18,7 +19,7 @@ print(gmflow_path)
 sys.path.append(str(gmflow_path))
 
 from gmflow.gmflow import GMFlow
-from utils.flow_viz import flow_tensor_to_image
+from utils.flow_viz import flow_tensor_to_image, flow_to_image
 
 import time
 
@@ -79,16 +80,19 @@ class GMFlowROS(Node):
         self.img2_tensor = None
         self.save_idx = 0
 
+        self.ts_offset = 1643e6
+
         self.img_sub = self.create_subscription(Image, "/optris/thermal_image", self.img_callback, 1)
-        self.flow_pub = self.create_publisher(CompressedImage, "/flow/compressed", 1)
-        self.img_flow_pub = self.create_publisher(Float64MultiArray, "/img_with_flow", 1)
+        self.flow_pub = self.create_publisher(Image, "/flow", 1)
+        self.img_flow_pub = self.create_publisher(Float32MultiArray, "/img_with_flow", 1)
 
     def img_callback(self, img_msg):
+        print(img_msg.header.stamp)
         # self.save_image(img_msg)
         # return
         if self.img1_tensor is None:
             self.img1_arr = self.load_img_arr(img_msg)
-            self.img1_ts = img_msg.header.stamp.to_sec()
+            self.img1_ts = Time.from_msg(img_msg.header.stamp).nanoseconds / 1e9
             self.img1_tensor = self.load_img_tensor(self.img1_arr)
             self.padder = InputPadder(self.img1_tensor.shape)
             # print(self.img1.shape)
@@ -97,7 +101,7 @@ class GMFlowROS(Node):
             return
         
         with torch.no_grad():
-            self.img2_ts = img_msg.header.stamp.to_sec()
+            self.img2_ts = Time.from_msg(img_msg.header.stamp).nanoseconds / 1e9
             self.img2_arr = self.load_img_arr(img_msg)
             self.img2_tensor = self.padder.pad(self.load_img_tensor(self.img2_arr))[0]
             
@@ -109,22 +113,25 @@ class GMFlowROS(Node):
                                  )
             t_cost = time.time() - inf_start
             print("inference time cost: {}".format(t_cost))
-            
+
             flow_pred = results_dict["flow_preds"][-1]
-            flow = self.padder.unpad(flow_pred[0]).cpu()
-            flow_data = flow.permute(1,2,0)
+            flow_pred = self.padder.unpad(flow_pred[0])
+            flow_data = flow_pred.permute(1,2,0).cpu().numpy()
+
             self.publish_multiarray(self.img1_arr, self.img2_arr, self.img1_ts, self.img2_ts, flow_data)
+            t_cost = time.time() - inf_start
+            print("send data time cost: {}".format(t_cost))
 
             self.img1_tensor = self.img2_tensor
             self.img1_arr = self.img2_arr
             self.img1_ts = self.img2_ts
             
             # print("flow dims: {}".format(flow.shape))
-            self.visualize(flow)
+            self.visualize(flow_pred)
 
     def load_img_arr(self, img_msg):
         cv_img = self.bridge.imgmsg_to_cv2(img_msg)
-        np_img = np.array(cv_img).astype(np.uint8)
+        np_img = np.array(cv_img).astype(np.float32)
         return np_img
 
     def load_img_tensor(self, np_img):
@@ -139,13 +146,18 @@ class GMFlowROS(Node):
         # print("flow shape: {}".format(flow.shape))
         # map flow to rgb image
         flow = flow_tensor_to_image(flow)
+        print(flow.shape)
         # print("converted flow dims: {}".format(flow.shape))
         img_msg = self.bridge.cv2_to_imgmsg(flow, "bgr8")
-        img_msg = self.bridge.cv2_to_compressed_imgmsg(flow)
+        # img_msg = Image()
+        # img_msg.data = flow
+        # img_msg = self.bridge.cv2_to_compressed_imgmsg(flow)
         self.flow_pub.publish(img_msg)
 
     def publish_multiarray(self, img1, img2, img1_ts, img2_ts, flow):
-        multi_arr = Float64MultiArray()
+        print("img1 ts: {}".format(img1_ts))
+        print("img2 ts: {}".format(img2_ts))
+        multi_arr = Float32MultiArray()
         dim1 = MultiArrayDimension()
         dim1.label = "height"
         dim1.size = img1.shape[0]
@@ -165,7 +177,7 @@ class GMFlowROS(Node):
         img1_data = img1.reshape((img1.shape[0] * img1.shape[1]))
         img2_data = img2.reshape((img2.shape[0] * img2.shape[1]))
         flow_data = flow.reshape((flow.shape[0] * flow.shape[1] * flow.shape[2]))
-        multi_arr.data = img1_data.tolist() + img2_data.tolist() + flow_data.tolist() + [img1_ts, img2_ts]
+        multi_arr.data = img1_data.tolist() + img2_data.tolist() + flow_data.tolist() + [img1_ts - self.ts_offset, img2_ts - self.ts_offset]
         self.img_flow_pub.publish(multi_arr)
         pass
 
