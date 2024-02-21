@@ -131,6 +131,8 @@ class GMFlowROS(Node):
 
     def load_img_arr(self, img_msg):
         cv_img = self.bridge.imgmsg_to_cv2(img_msg)
+        cv_img = cv2.normalize(cv_img, None, 0, 255, cv2.NORM_MINMAX)
+        print(img_msg.encoding)
         np_img = np.array(cv_img).astype(np.float32)
         return np_img
 
@@ -153,6 +155,11 @@ class GMFlowROS(Node):
         # img_msg.data = flow
         # img_msg = self.bridge.cv2_to_compressed_imgmsg(flow)
         self.flow_pub.publish(img_msg)
+
+    def publish_flow_image(self, img1, img2, img1_ts, img2_ts, flow):
+        flow_img = Image()
+
+        pass
 
     def publish_multiarray(self, img1, img2, img1_ts, img2_ts, flow):
         print("img1 ts: {}".format(img1_ts))
