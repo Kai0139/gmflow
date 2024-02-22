@@ -130,8 +130,8 @@ class GMFlowROS(Node):
             self.visualize(flow_pred)
 
     def load_img_arr(self, img_msg):
-        cv_img = self.bridge.imgmsg_to_cv2(img_msg)
-        cv_img = cv2.normalize(cv_img, None, 0, 255, cv2.NORM_MINMAX)
+        cv_img = self.bridge.imgmsg_to_cv2(img_msg) / 64
+        # cv_img = cv2.normalize(cv_img, None, 0, 255, cv2.NORM_MINMAX)
         print(img_msg.encoding)
         np_img = np.array(cv_img).astype(np.float32)
         return np_img

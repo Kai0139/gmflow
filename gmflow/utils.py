@@ -63,8 +63,10 @@ def normalize_img(img0, img1):
     return img0, img1
 
 def normalize_thermal_img(img0, img1):
-    img0 = (img0 / 255 - 0.5) / 0.225
-    img1 = (img1 / 255 - 0.5) / 0.225
+    # img0 = (img0 / (2**13 -1) - 0.5) / 0.225
+    # img1 = (img1 / (2**13 -1) - 0.5) / 0.225
+    img0 = (img0 / 255.0 - 0.5) / 0.225
+    img1 = (img1 / 255.0 - 0.5) / 0.225
     return img0, img1
 
 
