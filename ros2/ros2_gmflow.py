@@ -116,7 +116,7 @@ class GMFlowROS(Node):
 
             flow_pred = results_dict["flow_preds"][-1]
             flow_pred = self.padder.unpad(flow_pred[0])
-            flow_data = flow_pred.permute(1,2,0).cpu().numpy()
+            flow_data = flow_pred.cpu().numpy()
 
             self.publish_multiarray(self.img1_arr, self.img2_arr, self.img1_ts, self.img2_ts, flow_data)
             t_cost = time.time() - inf_start
@@ -183,6 +183,8 @@ class GMFlowROS(Node):
 
         img1_data = img1.reshape((img1.shape[0] * img1.shape[1]))
         img2_data = img2.reshape((img2.shape[0] * img2.shape[1]))
+        flow_x_data = flow[0, :, :].reshape((img1.shape[0] * img1.shape[1]))
+        flow_y_data = flow[1, :, :].reshape((img1.shape[0] * img1.shape[1]))
         flow_data = flow.reshape((flow.shape[0] * flow.shape[1] * flow.shape[2]))
         multi_arr.data = img1_data.tolist() + img2_data.tolist() + flow_data.tolist() + [img1_ts - self.ts_offset, img2_ts - self.ts_offset]
         self.img_flow_pub.publish(multi_arr)
