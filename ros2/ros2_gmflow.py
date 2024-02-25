@@ -83,10 +83,12 @@ class GMFlowROS(Node):
         self.save_idx = 0
 
         self.ts_offset = 1643e6
+        
+        self.flow_pub = self.create_publisher(Image, "/flow", 1)
+        self.flow_input_pub = self.create_publisher(Image, "/flow_input", 1)
+        self.img_flow_pub = self.create_publisher(Float32MultiArray, "/img_with_flow", 1)
 
         self.img_sub = self.create_subscription(Image, "/optris/thermal_image", self.img_callback, 1)
-        self.flow_pub = self.create_publisher(Image, "/flow", 1)
-        self.img_flow_pub = self.create_publisher(Float32MultiArray, "/img_with_flow", 1)
 
     def img_callback(self, img_msg):
         print(img_msg.header.stamp)
@@ -134,15 +136,23 @@ class GMFlowROS(Node):
             self.visualize(flow_pred)
 
     def load_img_arr(self, img_msg):
-        cv_img = self.bridge.imgmsg_to_cv2(img_msg) / 64
+        cv_img = self.bridge.imgmsg_to_cv2(img_msg)
         cv_img = cv2.normalize(cv_img, None, 0, 255, cv2.NORM_MINMAX)
+        # print("after norm: {}".format(cv_img))
         cv_img_255 = cv_img.astype(np.uint8)
-        cv_img_rgb = cv2.cvtColor(cv_img_255, cv2.COLOR_GRAY2RGB)
+        # print("uint8 norm: {}".format(cv_img_255))
+        # cv_img_rgb = cv2.cvtColor(cv_img_255, cv2.COLOR_GRAY2RGB)
+        cv_img_rgb = self.fake_thermal_color(cv_img_255)
+        img_rgb_msg = self.bridge.cv2_to_imgmsg(cv_img_rgb, "rgb8")
+        self.flow_input_pub.publish(img_rgb_msg)
         print("rgb cv_img shape: {}".format(cv_img_rgb.shape))
         # cv_img = cv2.normalize(cv_img, None, 0, 255, cv2.NORM_MINMAX)
         # print(img_msg.encoding)
         np_img_rgb = np.array(cv_img_rgb).astype(np.float32)
         return np_img_rgb, cv_img
+    
+    def fake_thermal_color(self, img):
+        return cv2.applyColorMap(img, cv2.COLORMAP_COOL)
 
     def load_img_tensor(self, np_img):
         img = torch.from_numpy(np_img)
@@ -188,8 +198,8 @@ class GMFlowROS(Node):
         multi_arr.layout.dim.append(dim2)
         multi_arr.layout.dim.append(dim3)
 
-        img1_data = img1.reshape((img1.shape[0] * img1.shape[1]))
-        img2_data = img2.reshape((img2.shape[0] * img2.shape[1]))
+        img1_data = img1.reshape((img1.shape[0] * img1.shape[1])).astype(np.float32)
+        img2_data = img2.reshape((img2.shape[0] * img2.shape[1])).astype(np.float32)
         flow_x_data = flow[0, :, :].reshape((img1.shape[0] * img1.shape[1]))
         flow_y_data = flow[1, :, :].reshape((img1.shape[0] * img1.shape[1]))
         # flow_data = flow.reshape((flow.shape[0] * flow.shape[1] * flow.shape[2]))
