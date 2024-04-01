@@ -80,6 +80,8 @@ class GMFlowROS(Node):
         self.img2_tensor = None
         self.save_idx = 0
 
+        self.min_avg_parallex = 9
+
         self.ts_offset = 1643e6
 
         self.img_sub = self.create_subscription(Image, "/optris/thermal_image", self.img_callback, 1)
@@ -87,9 +89,6 @@ class GMFlowROS(Node):
         self.img_flow_pub = self.create_publisher(Float32MultiArray, "/img_with_flow", 1)
 
     def img_callback(self, img_msg):
-        print(img_msg.header.stamp)
-        # self.save_image(img_msg)
-        # return
         if self.img1_tensor is None:
             self.img1_arr = self.load_img_arr(img_msg)
             self.img1_ts = Time.from_msg(img_msg.header.stamp).nanoseconds / 1e9
@@ -97,7 +96,7 @@ class GMFlowROS(Node):
             self.padder = InputPadder(self.img1_tensor.shape)
             # print(self.img1.shape)
             self.img1_tensor = self.padder.pad(self.img1_tensor)[0]
-            print("padded img shape: {}".format(self.img1_tensor.shape))
+            # print("padded img shape: {}".format(self.img1_tensor.shape))
             return
         
         with torch.no_grad():
@@ -112,15 +111,22 @@ class GMFlowROS(Node):
                                  prop_radius_list=self.prop_radius_list,
                                  )
             t_cost = time.time() - inf_start
-            print("inference time cost: {}".format(t_cost))
+            # print("inference time cost: {}".format(t_cost))
 
             flow_pred = results_dict["flow_preds"][-1]
             flow_pred = self.padder.unpad(flow_pred[0])
             flow_data = flow_pred.cpu().numpy()
 
+            parallex = self.check_parallex(flow_data)
+            if parallex < self.min_avg_parallex**2:
+                print("flow parallex {} is too small, skip this frame".format(parallex))
+                return
+            else:
+                print("flow parallex: {}".format(parallex))
+
             self.publish_multiarray(self.img1_arr, self.img2_arr, self.img1_ts, self.img2_ts, flow_data)
             t_cost = time.time() - inf_start
-            print("send data time cost: {}".format(t_cost))
+            # print("send data time cost: {}".format(t_cost))
 
             self.img1_tensor = self.img2_tensor
             self.img1_arr = self.img2_arr
@@ -128,6 +134,13 @@ class GMFlowROS(Node):
             
             # print("flow dims: {}".format(flow.shape))
             self.visualize(flow_pred)
+
+    def check_parallex(self, flow: np.ndarray):
+        flow_x = flow[0, :, :]
+        flow_y = flow[1, :, :]
+        flow_sqr = flow_x * flow_x + flow_y * flow_y
+        avg_flow = flow_sqr.mean()
+        return avg_flow
 
     def load_img_arr(self, img_msg):
         cv_img = self.bridge.imgmsg_to_cv2(img_msg)
@@ -183,8 +196,8 @@ class GMFlowROS(Node):
 
         img1_data = img1.reshape((img1.shape[0] * img1.shape[1]))
         img2_data = img2.reshape((img2.shape[0] * img2.shape[1]))
-        flow_x_data = flow[0, :, :].reshape((img1.shape[0] * img1.shape[1]))
-        flow_y_data = flow[1, :, :].reshape((img1.shape[0] * img1.shape[1]))
+        # flow_x_data = flow[0, :, :].reshape((img1.shape[0] * img1.shape[1]))
+        # flow_y_data = flow[1, :, :].reshape((img1.shape[0] * img1.shape[1]))
         flow_data = flow.reshape((flow.shape[0] * flow.shape[1] * flow.shape[2]))
         multi_arr.data = img1_data.tolist() + img2_data.tolist() + flow_data.tolist() + [img1_ts - self.ts_offset, img2_ts - self.ts_offset]
         self.img_flow_pub.publish(multi_arr)
