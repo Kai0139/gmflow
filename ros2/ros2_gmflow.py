@@ -111,7 +111,7 @@ class GMFlowROS(Node):
                                  prop_radius_list=self.prop_radius_list,
                                  )
             t_cost = time.time() - inf_start
-            # print("inference time cost: {}".format(t_cost))
+            print("inference time cost: {}".format(t_cost))
 
             flow_pred = results_dict["flow_preds"][-1]
             flow_pred = self.padder.unpad(flow_pred[0])

@@ -16,7 +16,9 @@ def closest(lst, K):
 
 class FlowFromBag(object):
     def __init__(self) -> None:
-        self.bag_path = Path('/home/viplab/data/thermal_slam_bags/ros2/sfm_xyz1')
+        self.bag_name = "xyz_clip_400"
+        self.name_idx_dict = {"xyz_clip_000": 17, "xyz_clip_100": 33, "xyz_clip_150": 32, "xyz_clip_200": 32, "xyz_clip_250": 32, "xyz_clip_300": 32, "xyz_clip_350": 32, "xyz_clip_400": 33}
+        self.bag_path = Path('/home/viplab/data/thermal_slam_bags/ros2/results/{}'.format(self.bag_name))
         self.bridge = CvBridge()
         typestore = get_typestore(Stores.ROS2_HUMBLE)
         self.reader = AnyReader([self.bag_path], default_typestore=typestore)
@@ -25,6 +27,7 @@ class FlowFromBag(object):
         self.window_gt_topic = "/gt_pose_array"
         self.point_marker_topic = "/point_marker"
         self.grad_img_topic = "/fsvio_ros2/grad_image"
+        self.save_dir = "sfm_figs_150"
         self.topic_list = [self.window_pose_topic, self.point_marker_topic, self.window_gt_topic, self.grad_img_topic]
         
     def read_bag(self):
@@ -32,7 +35,7 @@ class FlowFromBag(object):
         pose_sets = []
         sfm_ts_list = []
         grad_img_list = []
-        grad_img_ts_list = []
+        grad_img_ts_list = []   
         self.reader.open()
         connections = [x for x in self.reader.connections if x.topic in self.topic_list]
         for connection, timestamp, rawdata in self.reader.messages(connections=connections):
@@ -58,30 +61,37 @@ class FlowFromBag(object):
             # print(idx)
             # self.plot_3d_points(point_sets[idx], pose_sets[idx])
             pass
-        # sfm1: 37
+        # sfm1: 37 39
         # sfm3: 20 60
         # sfm4: 27 28 30 49
-        sfm_idx = 39
-        self.plot_3d_points(point_sets[sfm_idx], pose_sets[sfm_idx])
-        # print(sfm_ts_list[37])
-        # print(grad_img_ts_list[100])
-        closest_idx = closest(grad_img_ts_list, sfm_ts_list[sfm_idx])
-        cv2.imwrite("grad_img.png", grad_img_list[closest_idx-10])
+        # clip 400: 32
+        # clip 100: 33
+        clip_idx = {}
+        opt_100 = [72, 100, 102, 103, 104, 114]
+        # idx_set = [i for i in range(len(point_sets))]
+        idx_set = [self.name_idx_dict[self.bag_name]]
+        for sfm_idx in idx_set:
+            print("sfm idx: ", sfm_idx)
+            self.plot_3d_points(point_sets[sfm_idx], pose_sets[sfm_idx], sfm_idx)
+            # print(sfm_ts_list[37])
+            # print(grad_img_ts_list[100])
+            closest_idx = closest(grad_img_ts_list, sfm_ts_list[sfm_idx])
+            # cv2.imwrite("xyz_clip/{}/grad_img_{}.png".format(self.bag_name, sfm_idx), grad_img_list[closest_idx-10])
         self.reader.close()
 
-    def plot_3d_points(self, pts, poses):
-        fig = plt.figure()
+    def plot_3d_points(self, pts, poses, idx):
+        fig = plt.figure(figsize=(10, 7))
         ax = fig.add_subplot(111, projection='3d')
         # Plot points
         ax.scatter(pts[:, 0], pts[:, 1], pts[:, 2], label='Points', c='b', s=4.0)
 
         # Plot poses as three axes (orientation)
         x_offset = np.mean(poses[:,0])
-        print("pose shape: ", poses.shape)
-        print("x offset: ", x_offset)
+        # print("pose shape: ", poses.shape)
+        # print("x offset: ", x_offset)
         for pose in poses:
             x, y, z = pose[:3]  # Position of the pose
-            # x = x_offset
+            x = x - x_offset
             qw, qx, qy, qz = pose[3:]  # Orientation of the pose
             rot = Rot.from_quat([qx, qy, qz, qw])
             rot_m = rot.as_matrix()
@@ -100,10 +110,12 @@ class FlowFromBag(object):
         ax.set_xlabel('X')
         ax.set_ylabel('Y')
         ax.set_zlabel('Z')
-        ax.set_title('3D Plot of Points and Poses')
+        ax.set_title('SFM Optimization 400ms')
+        ax.view_init(elev=30, azim=-60)
 
         # Show the plot
         plt.legend()
+        # plt.savefig("xyz_clip/{}/3d_plot_{}.png".format(self.bag_name, idx))
         plt.show()
         pass
 
